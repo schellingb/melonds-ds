@@ -2,12 +2,9 @@ name: CMake Build (Windows)
 
 on:
   push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
-
+  repository_dispatch:
+    types: [run_build]
 env:
   BUILD_TYPE: Release
   BUILD_DIR: "${{github.workspace}}/build"

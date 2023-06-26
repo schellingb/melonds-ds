@@ -2,11 +2,9 @@ name: CMake Build (Linux)
 
 on:
   push:
-    branches:
-      - main
   pull_request:
-    branches:
-      - main
+  repository_dispatch:
+    types: [run_build]
 env:
   BUILD_DIR: "${{github.workspace}}/build"
   DIST_DIR: "${{github.workspace}}/build/dist"
