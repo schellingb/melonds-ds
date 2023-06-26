@@ -14,58 +14,258 @@
     with melonDS DS. If not, see http://www.gnu.org/licenses/.
 */
 
+#include <cstring>
+#include <ctime>
 #include <Platform.h>
-#include <net/net_socket.h>
+#include <SPI.h>
+#include "../environment.hpp"
+
+#define GetUi16(p) ((u16)(((const u8*)(p))[0] | ((u16)((const u8*)(p))[1] << 8)))
+#define GetUi32(p) (((const u8*)(p))[0] | ((u32)((const u8*)(p))[1] << 8) | ((u32)((const u8*)(p))[2] << 16) | ((u32)((const u8*)(p))[3] << 24))
+#define GetUi64(p) (GetUi32(p) | ((u64)GetUi32(((const u8*)(p)) + 4) << 32))
+
+#define SetUi16(p,v) { ((u8*)(p))[0] = (u8)((u16)(v) & 0xFF); ((u8*)(p))[1] = (u8)(((u16)(v) >> 8) & 0xFF); }
+#define SetUi32(p,v) { ((u8*)(p))[0] = (u8)((u32)(v) & 0xFF); ((u8*)(p))[1] = (u8)(((u32)(v) >> 8) & 0xFF); ((u8*)(p))[2] = (u8)(((u32)(v) >> 16) & 0xFF); ((u8*)(p))[3] = (u8)(((u32)(v) >> 24) & 0xFF); }
+#define SetUi64(p,v) { SetUi32(p, v); SetUi32((u8*)(p)+4, (u64)(v) >> 32); }
+
+namespace retro_mp {
+    static bool _mp_on;
+    static int _connections;
+    static u16 _client_id;
+    static std::vector<u8> _buf, _incoming;
+    static retro_netpacket_send_t _send_fn;
+
+    static int BlockForNewIncoming();
+    static int SendPacketGeneric(u32 type, u8* packet, int len, u64 timestamp);
+    static int RecvPacketGeneric(u8* packet, bool block, u64* timestamp);
+    static void NetPacketStart(uint16_t client_id, retro_netpacket_send_t _send_fn);
+    static void NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id);
+    static void NetPacketStop(void);
+    static bool NetPacketConnected(uint16_t client_id);
+    static void NetPacketDisconnected(uint16_t client_id);
+    static void WriteFirmwareMacAddress();
+
+    enum {
+        MIN_PACKET_LEN = 4 + 8,
+        MAX_PACKET_LEN = 4 + 8 + 2048,
+        RECV_TIMEOUT = 250, // TODO: Make configurable (is 25 in upstream melonDS)
+    };
+}
+
+bool retro_mp::BlockForNewIncoming()
+{
+    // block until data arrives
+    size_t start_incoming_size = _incoming.size();
+    for (std::clock_t t_start = std::clock();;)
+    {
+        // check latest incoming
+        if (send_fn)
+            send_fn(0, 0, 0, 0, 0);
+        if (_incoming.size() > start_incoming_size)
+            return true;
+        if (!_connections || ((std::clock() - t_start) * 1000 / CLOCKS_PER_SEC) > RECV_TIMEOUT)
+            return false;
+    }
+}
+
+int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp)
+{
+    if (!_connections)
+        return 0;
+
+    size_t pktlen = 4 + 8 + (size_t)len;
+    if (_buf.size() < pktlen)
+        _buf.resize(pktlen);
+
+    SetUi32(&_buf[0], type);
+    SetUi64(&_buf[4], timestamp);
+    std::memcpy(&_buf[4 + 8], data, (size_t)len);
+
+    // broadcast to everyone
+    _send_fn(RETRO_NETPACKET_RELIABLE, &_buf[0], pktlen, 0xFFFF, true);
+    return (int)pktlen;
+}
+
+int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp)
+{
+    // if no other player exists: return early
+    if (!_connections)
+        return 0;
+
+    for (;;)
+    {
+        for (size_t i = 0, pktlen; i < _incoming.size(); i += 8 + pktlen)
+        {
+            pktlen = (size_t)GetUi64(&_incoming[i + 0]);
+            u32 type = GetUi32(&_incoming[i + 8]);
+            if ((type & 0xFFFF) == 2)
+                continue; // ignore replies
+
+            u64 timestamp = GetUi64(&_incoming[i + 8 + 4]);
+            int len = (int)(pktlen - (8 + 4));
+
+            if (out_data)
+                std::memcpy(out_data, &_incoming[i + 8 + 4 + 8], len);
+
+            if (out_timestamp)
+                *out_timestamp = timestamp;
+
+            // consume from incoming buffer
+            _incoming.erase(_incoming.begin() + i, _incoming.begin() + i + 8 + pktlen);
+
+            return len;
+        }
+
+        // wait for another packet
+        if (!block || !BlockForNewIncoming())
+            return 0;
+    }
+}
+
+u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask)
+{
+    // if no other player exists: return early
+    if (!_connections)
+        return 0;
+
+    for (u16 ret = 0;;)
+    {
+        for (size_t i = 0, pktlen; i < _incoming.size(); i += 8 + pktlen)
+        {
+            pktlen = (size_t)GetUi64(&_incoming[i + 0]);
+            u32 type = GetUi32(&_incoming[i + 8]);
+            if ((type & 0xFFFF) != 2)
+                continue; // not a reply
+
+            u64 timestamp = GetUi64(&_incoming[i + 8 + 4]);
+            if (pktheader.Timestamp >= (timestamp - 32)) // relevant packet
+            {
+                int len = (int)(pktlen - (8 + 4));
+                u32 aid = (type >> 16);
+                if (packets && aid && len <= 1024)
+                    std::memcpy(&packets[(aid-1)*1024], &_incoming[i + 8 + 4 + 8], len);
+                ret |= (1 << aid);
+            }
+
+            // consume from incoming buffer
+            _incoming.erase(_incoming.begin() + i, _incoming.begin() + i + 8 + pktlen);
+        }
+
+        if ((ret & aidmask) == aidmask)
+        {
+            // all the clients have sent their reply
+            return ret;
+        }
+
+        // wait for another packet
+        if (!BlockForNewIncoming())
+            return ret; // no more replies available
+    }
+}
+
+void retro_mp::WriteFirmwareMacAddress()
+{
+    // store client_id in firmware mac address
+    u8* mac = SPI_Firmware::GetWifiMAC();
+    mac[4] = (u8)(_client_id >> 8);
+    mac[5] = (u8)(_client_id & 255);
+}
+
+void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn)
+{
+    _send_fn = send_fn;
+    _client_id = client_id;
+    WriteFirmwareMacAddress();
+    if (client_id != 0)
+    {
+        // I am a client already connected to the host
+        _connections = 1;
+    }
+}
+
+void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id)
+{
+    if (!_mp_on)
+        return; // mp hasn't begun yet
+
+    if (pktlen < MIN_PACKET_LEN || pktlen > MAX_PACKET_LEN)
+        return; // invalid length
+
+    size_t incoming_ofs = _incoming.size(), total_len = 8 + pktlen;
+    _incoming.resize(incoming_ofs + total_len);
+    SetUi64(&_incoming[incoming_ofs], pktlen);
+    std::memcpy(&_incoming[incoming_ofs + 8], pkt, pktlen);
+}
+
+void retro_mp::NetPacketStop(void)
+{
+    _connections = 0;
+    _incoming.clear();
+    _send_fn = nullptr;
+}
+
+static bool retro_mp::NetPacketConnected(uint16_t client_id)
+{
+    _connections++;
+    return true;
+}
+
+static void retro_mp::NetPacketDisconnected(uint16_t client_id)
+{
+    _connections--;
+}
 
 bool Platform::MP_Init() {
-    // TODO: Implement
-    return false;
+    static const retro_netpacket_callback packet_callbacks =
+    {
+        retro_mp::NetPacketStart,
+        retro_mp::NetPacketReceive,
+        retro_mp::NetPacketStop
+        nullptr, // poll
+        retro_mp::NetPacketConnected,
+        retro_mp::NetPacketDisconnected
+    };
+    retro::environment(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void *)&packet_callbacks);
+    return true;
 }
 
 void Platform::MP_DeInit() {
-    // TODO: Implement
+    retro_mp::_incoming.clear();
 }
 
 void Platform::MP_Begin() {
-    // TODO: Implement
+    retro_mp::_mp_on = true;
+    retro_mp::WriteFirmwareMacAddress();
 }
 
 void Platform::MP_End() {
-    // TODO: Implement
+    retro_mp::_mp_on = false;
 }
 
 int Platform::MP_SendPacket(u8 *data, int len, u64 timestamp) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::SendPacketGeneric(0, data, len, timestamp);
 }
 
 int Platform::MP_RecvPacket(u8 *data, u64 *timestamp) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::RecvPacketGeneric(data, false, timestamp);
 }
 
 int Platform::MP_SendCmd(u8 *data, int len, u64 timestamp) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::SendPacketGeneric(1, data, len, timestamp);
 }
 
 int Platform::MP_SendReply(u8 *data, int len, u64 timestamp, u16 aid) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::SendPacketGeneric(2 | (aid<<16), data, len, timestamp);
 }
 
 int Platform::MP_SendAck(u8 *data, int len, u64 timestamp) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::SendPacketGeneric(3, data, len, timestamp);
 }
 
 int Platform::MP_RecvHostPacket(u8 *data, u64 *timestamp) {
-    // TODO: Implement
-    return 0;
-
+    return retro_mp::RecvPacketGeneric(data, true, timestamp);
 }
 
 u16 Platform::MP_RecvReplies(u8 *data, u64 timestamp, u16 aidmask) {
-    // TODO: Implement
-    return 0;
+    return retro_mp::RecvReplies(data, timestamp, aidmask);
 }
