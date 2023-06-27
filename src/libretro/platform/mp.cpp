@@ -18,6 +18,7 @@
 #include <ctime>
 #include <Platform.h>
 #include <SPI.h>
+#include <NDS.h>
 #include "../environment.hpp"
 
 #define GetUi32(p) (((const u8*)(p))[0] | ((u32)((const u8*)(p))[1] << 8) | ((u32)((const u8*)(p))[2] << 16) | ((u32)((const u8*)(p))[3] << 24))
@@ -26,7 +27,7 @@
 #define SetUi64(p,v) { SetUi32(p, v); SetUi32((u8*)(p)+4, (u64)(v) >> 32); }
 
 namespace retro_mp {
-    static bool _mp_on;
+    static bool _interface_set, _mp_begun;
     static int _connections;
     static u16 _client_id;
     static std::vector<u8> _buf, _incoming;
@@ -180,18 +181,25 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
 void retro_mp::WriteFirmwareMacAddress() {
     // store client_id in firmware mac address
     u8* mac = SPI_Firmware::GetWifiMAC();
-    // Temporarily disabled:
-    //mac[4] = (u8)(_client_id >> 8);
-    //mac[5] = (u8)(_client_id & 255);
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] Write my client id %d to Firmware Mac address: %02x:%02x:%02x:%02x:%02x:%02x\n",
-        _client_id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    retro::log(RETRO_LOG_DEBUG, "[DSNET] Old firmware MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    mac[4] = (u8)(_client_id >> 8);
+    mac[5] = (u8)(_client_id & 255);
+    retro::log(RETRO_LOG_DEBUG, "[DSNET] Write my client id %d to firmware MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", _client_id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn) {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - My client id: %d\n", client_id);
+    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - My client id: %d - client id in firmware MAC address: %d\n", client_id, ((SPI_Firmware::GetWifiMAC()[4] << 8) | SPI_Firmware::GetWifiMAC()[5]));
     _send_fn = send_fn;
     _client_id = client_id;
-    WriteFirmwareMacAddress();
+
+    const u8* mac = SPI_Firmware::GetWifiMAC();
+    u16 mac_client_id = (u16)((mac[4] << 8) | mac[5]);
+    if (mac_client_id != client_id) {
+        // Need to reset the system if we want to modify the mac address
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - Client id is different than what is in MAC address, reset NDS system\n");
+        NDS::Reset();
+    }
+
     if (client_id != 0) {
         // I am a client already connected to the host
         _connections = 1;
@@ -199,7 +207,7 @@ void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn
 }
 
 void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id) {
-    if (!_mp_on)
+    if (!_mp_begun)
     {
         retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d while mp was off\n", (int)pktlen, client_id);
         return; // mp hasn't begun yet
@@ -242,33 +250,36 @@ static void retro_mp::NetPacketDisconnected(uint16_t client_id) {
 }
 
 bool Platform::MP_Init() {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_Init\n");
-    static const retro_netpacket_callback packet_callbacks = {
-        retro_mp::NetPacketStart,
-        retro_mp::NetPacketReceive,
-        retro_mp::NetPacketStop,
-        nullptr, // poll
-        retro_mp::NetPacketConnected,
-        retro_mp::NetPacketDisconnected
-    };
-    retro::environment(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void *)&packet_callbacks);
+    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_Init - Interface Set: %d\n", (int)retro_mp::_interface_set);
+    if (!retro_mp::_interface_set) { // do only once
+        retro_mp::_interface_set = true;
+        static const retro_netpacket_callback packet_callbacks = {
+            retro_mp::NetPacketStart,
+            retro_mp::NetPacketReceive,
+            retro_mp::NetPacketStop,
+            nullptr, // poll
+            retro_mp::NetPacketConnected,
+            retro_mp::NetPacketDisconnected
+        };
+        retro::environment(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void *)&packet_callbacks);
+    }
+    retro_mp::WriteFirmwareMacAddress();
     return true;
 }
 
 void Platform::MP_DeInit() {
     retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_DeInit\n");
-    retro_mp::_incoming.clear();
 }
 
 void Platform::MP_Begin() {
     retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_Begin\n");
-    retro_mp::_mp_on = true;
-    retro_mp::WriteFirmwareMacAddress();
+    retro_mp::_mp_begun = true;
 }
 
 void Platform::MP_End() {
     retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_End\n");
-    retro_mp::_mp_on = false;
+    retro_mp::_mp_begun = false;
+    retro_mp::_incoming.clear();
 }
 
 int Platform::MP_SendPacket(u8 *data, int len, u64 timestamp) {
