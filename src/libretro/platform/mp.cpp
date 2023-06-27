@@ -56,6 +56,8 @@ namespace retro_mp {
 }
 
 bool retro_mp::BlockForNewIncoming() {
+    return false;
+    /*
     // block until data arrives
     size_t start_incoming_size = _incoming.size();
     for (std::clock_t t_start = std::clock();;) {
@@ -67,6 +69,7 @@ bool retro_mp::BlockForNewIncoming() {
         if (!_connections || ((std::clock() - t_start) * 1000 / CLOCKS_PER_SEC) > RECV_TIMEOUT)
             return false;
     }
+    */
 }
 
 int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
