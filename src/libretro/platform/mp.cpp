@@ -66,7 +66,10 @@ bool retro_mp::BlockForNewIncoming() {
 
 int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
     if (!_connections)
-        return 0;
+    {
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] SEND     - Discard packet of size %d due to no one connected\n", (int)(4 + 8 + (size_t)len));
+        return len; // no one around to receive packets
+    }
 
     size_t pktlen = 4 + 8 + (size_t)len;
     if (_buf.size() < pktlen)
@@ -82,13 +85,16 @@ int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
 
     // broadcast to everyone
     _send_fn(RETRO_NETPACKET_RELIABLE, &_buf[0], pktlen, 0xFFFF, true);
-    return (int)pktlen;
+    return len;
 }
 
 int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
     // if no other player exists: return early
     if (!_connections)
+    {
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV GEN - Block: %d - No one connected, cannot receive\n", (int)block);
         return 0;
+    }
 
     for (;;) {
         for (size_t i = 0, pktlen; i < _incoming.size(); i += 8 + pktlen) {
@@ -118,14 +124,20 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
 
         // wait for another packet
         if (!block || !BlockForNewIncoming())
+        {
+            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV GEN - Block: %d - No incoming packet, cannot receive\n", (int)block);
             return 0;
+        }
     }
 }
 
 u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
     // if no other player exists: return early
     if (!_connections)
+    {
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - No one connected, cannot receive\n", aidmask);
         return 0;
+    }
 
     for (u16 ret = 0;;) {
         for (size_t i = 0, pktlen; i < _incoming.size(); i += 8 + pktlen) {
@@ -153,12 +165,15 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
 
         if ((ret & aidmask) == aidmask) {
             // all the clients have sent their reply
+            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - Ret: %04x - Got all replies\n", aidmask, ret);
             return ret;
         }
 
         // wait for another packet
-        if (!BlockForNewIncoming())
+        if (!BlockForNewIncoming()) {
+            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - Ret: %04x - No incoming packet, cannot receive all\n", aidmask, ret);
             return ret; // no more replies available
+        }
     }
 }
 
@@ -185,13 +200,13 @@ void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn
 void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id) {
     if (!_mp_on)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECEIVE - Discard packet of size %d from client %d while mp was off\n", (int)pktlen, client_id);
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d while mp was off\n", (int)pktlen, client_id);
         return; // mp hasn't begun yet
     }
 
     if (pktlen < MIN_PACKET_LEN || pktlen > MAX_PACKET_LEN)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECEIVE - Discard packet of size %d from client %d due to invalid length\n", (int)pktlen, client_id);
+        retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d due to invalid length\n", (int)pktlen, client_id);
         return; // invalid length
     }
 
