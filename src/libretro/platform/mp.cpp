@@ -180,8 +180,9 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
 void retro_mp::WriteFirmwareMacAddress() {
     // store client_id in firmware mac address
     u8* mac = SPI_Firmware::GetWifiMAC();
-    mac[4] = (u8)(_client_id >> 8);
-    mac[5] = (u8)(_client_id & 255);
+    // Temporarily disabled:
+    //mac[4] = (u8)(_client_id >> 8);
+    //mac[5] = (u8)(_client_id & 255);
     retro::log(RETRO_LOG_DEBUG, "[DSNET] Write my client id %d to Firmware Mac address: %02x:%02x:%02x:%02x:%02x:%02x\n",
         _client_id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
@@ -209,7 +210,6 @@ void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_
         retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d due to invalid length\n", (int)pktlen, client_id);
         return; // invalid length
     }
-
 
     u32 type = GetUi32(&((const u8*)pkt)[0]);
     u64 timestamp = GetUi64(&((const u8*)pkt)[4]);
