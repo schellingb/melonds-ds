@@ -51,7 +51,7 @@ namespace retro_mp {
     enum {
         MIN_PACKET_LEN = 4 + 8,
         MAX_PACKET_LEN = 4 + 8 + 2048,
-        RECV_TIMEOUT = 25, //250, // TODO: Make configurable (is 25 in upstream melonDS)
+        RECV_TIMEOUT = 5, //250, // TODO: Make configurable (is 25 in upstream melonDS)
     };
 }
 
