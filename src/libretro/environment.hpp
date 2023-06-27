@@ -55,6 +55,8 @@ namespace retro {
     const std::optional<std::string>& get_system_directory();
 
     void clear_environment();
+
+    void platform_set_instance_id(int instance_id);
 }
 
 #endif //MELONDS_DS_ENVIRONMENT_HPP

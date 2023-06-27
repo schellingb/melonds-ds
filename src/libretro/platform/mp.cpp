@@ -42,7 +42,6 @@ namespace retro_mp {
     static void NetPacketStop(void);
     static bool NetPacketConnected(uint16_t client_id);
     static void NetPacketDisconnected(uint16_t client_id);
-    static void WriteFirmwareMacAddress();
 
     enum {
         MIN_PACKET_LEN = 4 + 8,
@@ -178,27 +177,11 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
     }
 }
 
-void retro_mp::WriteFirmwareMacAddress() {
-    // store client_id in firmware mac address
-    u8* mac = SPI_Firmware::GetWifiMAC();
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] Old firmware MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    mac[4] = (u8)(_client_id >> 8);
-    mac[5] = (u8)(_client_id & 255);
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] Write my client id %d to firmware MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n", _client_id, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
 void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn) {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - My client id: %d - client id in firmware MAC address: %d\n", client_id, ((SPI_Firmware::GetWifiMAC()[4] << 8) | SPI_Firmware::GetWifiMAC()[5]));
+    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - My client id: %d\n", client_id);
     _send_fn = send_fn;
     _client_id = client_id;
-
-    const u8* mac = SPI_Firmware::GetWifiMAC();
-    u16 mac_client_id = (u16)((mac[4] << 8) | mac[5]);
-    if (mac_client_id != client_id) {
-        // Need to reset the system if we want to modify the mac address
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - Client id is different than what is in MAC address, reset NDS system\n");
-        NDS::Reset();
-    }
+    retro::platform_set_instance_id(client_id);
 
     if (client_id != 0) {
         // I am a client already connected to the host
@@ -263,7 +246,6 @@ bool Platform::MP_Init() {
         };
         retro::environment(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void *)&packet_callbacks);
     }
-    retro_mp::WriteFirmwareMacAddress();
     return true;
 }
 

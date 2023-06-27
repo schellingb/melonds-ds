@@ -50,12 +50,16 @@ int Platform::InstanceID() {
 
 // TODO: Split upstream implementation into a non-Qt file
 std::string Platform::InstanceFileSuffix() {
+    // Not used in libretro, but we need instance_id for mp.cpp
+    return "";
+    /*
     int instance = Platform::_instance_id;
     if (instance == 0) return "";
 
     char suffix[16] = {0};
     snprintf(suffix, 15, ".%d", instance + 1);
     return suffix;
+    */
 }
 
 static retro_log_level to_retro_log_level(Platform::LogLevel level)
@@ -118,4 +122,13 @@ void Platform::WriteGBASave(const u8* savedata, u32 savelen, u32 writeoffset, u3
         // a sequence of disk writes.
         melonds::TimeToGbaFlush = Config::Retro::FlushDelay;
     }
+}
+
+void retro::platform_set_instance_id(int instance_id) {
+    if (_instance_id == instance_id)
+        return;
+
+    retro::log(RETRO_LOG_DEBUG, "Reset NDS system due to instance id changing from %d to %d\n", _instance_id, instance_id);
+    _instance_id = instance_id;
+    NDS::Reset();
 }
