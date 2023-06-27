@@ -129,7 +129,7 @@ void retro::platform_set_instance_id(int instance_id) {
     if (Platform::_instance_id == instance_id)
         return;
 
-    retro::log(RETRO_LOG_DEBUG, "Reset NDS system due to instance id changing from %d to %d\n", Platform::_instance_id, instance_id);
+    retro::log(RETRO_LOG_DEBUG, "Reset core due to instance id changing from %d to %d\n", Platform::_instance_id, instance_id);
     Platform::_instance_id = instance_id;
-    NDS::Reset();
+    retro_reset();
 }

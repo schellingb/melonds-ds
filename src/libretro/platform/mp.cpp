@@ -25,6 +25,12 @@
 #define SetUi32(p,v) { ((u8*)(p))[0] = (u8)((u32)(v) & 0xFF); ((u8*)(p))[1] = (u8)(((u32)(v) >> 8) & 0xFF); ((u8*)(p))[2] = (u8)(((u32)(v) >> 16) & 0xFF); ((u8*)(p))[3] = (u8)(((u32)(v) >> 24) & 0xFF); }
 #define SetUi64(p,v) { SetUi32(p, v); SetUi32((u8*)(p)+4, (u64)(v) >> 32); }
 
+#if 0
+#define MP_LOG(...)  do { retro::log(RETRO_LOG_DEBUG, "[DSNET] " __VA_ARGS__);  } while (0)
+#else
+#define MP_LOG(...) {}
+#endif
+
 namespace retro_mp {
     static bool _interface_set, _mp_begun;
     static int _connections;
@@ -45,7 +51,7 @@ namespace retro_mp {
     enum {
         MIN_PACKET_LEN = 4 + 8,
         MAX_PACKET_LEN = 4 + 8 + 2048,
-        RECV_TIMEOUT = 250, // TODO: Make configurable (is 25 in upstream melonDS)
+        RECV_TIMEOUT = 25, //250, // TODO: Make configurable (is 25 in upstream melonDS)
     };
 }
 
@@ -66,7 +72,7 @@ bool retro_mp::BlockForNewIncoming() {
 int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
     if (!_connections)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] SEND     - Discard packet of size %d due to no one connected\n", (int)(4 + 8 + (size_t)len));
+        MP_LOG("SEND     - Discard packet of size %d due to no one connected\n", (int)(4 + 8 + (size_t)len));
         return len; // no one around to receive packets
     }
 
@@ -79,7 +85,7 @@ int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
     std::memcpy(&_buf[4 + 8], data, (size_t)len);
 
     const u8* p = (pktlen >= (4 + 8 + 8) ? data : nullptr);
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] SEND     - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
+    MP_LOG("SEND     - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
         (int)pktlen, type, timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
 
     // broadcast to everyone
@@ -91,7 +97,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
     // if no other player exists: return early
     if (!_connections)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV GEN - Block: %d - No one connected, cannot receive\n", (int)block);
+        MP_LOG("RECV GEN - Block: %d - No one connected, cannot receive\n", (int)block);
         return 0;
     }
 
@@ -106,7 +112,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
             int len = (int)(pktlen - (8 + 4));
 
             const u8* p = (pktlen >= (4 + 8 + 8) ? &_incoming[i + 8 + 4 + 8] : nullptr);
-            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV GEN - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
+            MP_LOG("RECV GEN - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
                 (int)pktlen, type, timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
 
             if (out_data)
@@ -124,7 +130,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
         // wait for another packet
         if (!block || !BlockForNewIncoming())
         {
-            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV GEN - Block: %d - No incoming packet, cannot receive\n", (int)block);
+            MP_LOG("RECV GEN - Block: %d - No incoming packet, cannot receive\n", (int)block);
             return 0;
         }
     }
@@ -134,7 +140,7 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
     // if no other player exists: return early
     if (!_connections)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - No one connected, cannot receive\n", aidmask);
+        MP_LOG("RECV REP - AidMask: %04x - No one connected, cannot receive\n", aidmask);
         return 0;
     }
 
@@ -155,7 +161,7 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
             }
 
             const u8* p = (pktlen >= (4 + 8 + 8) ? &_incoming[i + 8 + 4 + 8] : nullptr);
-            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
+            MP_LOG("RECV REP - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
                 (int)pktlen, type, pkt_timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
 
             // consume from incoming buffer
@@ -164,20 +170,20 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
 
         if ((ret & aidmask) == aidmask) {
             // all the clients have sent their reply
-            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - Ret: %04x - Got all replies\n", aidmask, ret);
+            MP_LOG("RECV REP - AidMask: %04x - Ret: %04x - Got all replies\n", aidmask, ret);
             return ret;
         }
 
         // wait for another packet
         if (!BlockForNewIncoming()) {
-            retro::log(RETRO_LOG_DEBUG, "[DSNET] RECV REP - AidMask: %04x - Ret: %04x - No incoming packet, cannot receive all\n", aidmask, ret);
+            MP_LOG("RECV REP - AidMask: %04x - Ret: %04x - No incoming packet, cannot receive all\n", aidmask, ret);
             return ret; // no more replies available
         }
     }
 }
 
 void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn) {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStart - My client id: %d\n", client_id);
+    MP_LOG("NetPacketStart - My client id: %d\n", client_id);
     _send_fn = send_fn;
     _client_id = client_id;
     retro::platform_set_instance_id(client_id);
@@ -191,20 +197,20 @@ void retro_mp::NetPacketStart(uint16_t client_id, retro_netpacket_send_t send_fn
 void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id) {
     if (!_mp_begun)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d while mp was off\n", (int)pktlen, client_id);
+        MP_LOG("INCOMING - Discard packet of size %d from client %d while mp was off\n", (int)pktlen, client_id);
         return; // mp hasn't begun yet
     }
 
     if (pktlen < MIN_PACKET_LEN || pktlen > MAX_PACKET_LEN)
     {
-        retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Discard packet of size %d from client %d due to invalid length\n", (int)pktlen, client_id);
+        MP_LOG("INCOMING - Discard packet of size %d from client %d due to invalid length\n", (int)pktlen, client_id);
         return; // invalid length
     }
 
     u32 type = GetUi32(&((const u8*)pkt)[0]);
     u64 timestamp = GetUi64(&((const u8*)pkt)[4]);
     const u8* p = (pktlen >= (4 + 8 + 8) ? &((const u8*)pkt)[4 + 8] : nullptr);
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] INCOMING - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x... - Source: %d\n",
+    MP_LOG("INCOMING - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x... - Source: %d\n",
         (int)pktlen, type, timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1), client_id);
 
     size_t incoming_ofs = _incoming.size(), total_len = 8 + pktlen;
@@ -214,7 +220,7 @@ void retro_mp::NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_
 }
 
 void retro_mp::NetPacketStop(void) {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] NetPacketStop\n");
+    MP_LOG("NetPacketStop\n");
     _connections = 0;
     _incoming.clear();
     _send_fn = nullptr;
@@ -222,17 +228,17 @@ void retro_mp::NetPacketStop(void) {
 
 static bool retro_mp::NetPacketConnected(uint16_t client_id) {
     _connections++;
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] Connected - Client ID: %d - Connections: %d\n", client_id, _connections);
+    MP_LOG("Connected - Client ID: %d - Connections: %d\n", client_id, _connections);
     return true;
 }
 
 static void retro_mp::NetPacketDisconnected(uint16_t client_id) {
     _connections--;
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] Disconnected - Client ID: %d - Connections: %d\n", client_id, _connections);
+    MP_LOG("Disconnected - Client ID: %d - Connections: %d\n", client_id, _connections);
 }
 
 bool Platform::MP_Init() {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_Init - Interface Set: %d\n", (int)retro_mp::_interface_set);
+    MP_LOG("MP_Init - Interface Set: %d\n", (int)retro_mp::_interface_set);
     if (!retro_mp::_interface_set) { // do only once
         retro_mp::_interface_set = true;
         static const retro_netpacket_callback packet_callbacks = {
@@ -249,16 +255,16 @@ bool Platform::MP_Init() {
 }
 
 void Platform::MP_DeInit() {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_DeInit\n");
+    MP_LOG("MP_DeInit\n");
 }
 
 void Platform::MP_Begin() {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_Begin\n");
+    MP_LOG("MP_Begin\n");
     retro_mp::_mp_begun = true;
 }
 
 void Platform::MP_End() {
-    retro::log(RETRO_LOG_DEBUG, "[DSNET] MP_End\n");
+    MP_LOG("MP_End\n");
     retro_mp::_mp_begun = false;
     retro_mp::_incoming.clear();
 }
