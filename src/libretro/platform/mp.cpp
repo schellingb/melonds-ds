@@ -51,7 +51,7 @@ namespace retro_mp {
     enum {
         MIN_PACKET_LEN = 4 + 8,
         MAX_PACKET_LEN = 4 + 8 + 2048,
-        RECV_TIMEOUT = 5, //250, // TODO: Make configurable (is 25 in upstream melonDS)
+        RECV_TIMEOUT = 10, //250, // TODO: Make configurable (is 25 in upstream melonDS)
     };
 }
 
@@ -102,7 +102,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
         return 0;
     }
 
-    for (;;) {
+    for (int len = 0;;) {
         for (size_t i = 0, pktlen; i < _incoming.size(); i += 8 + pktlen) {
             pktlen = (size_t)GetUi64(&_incoming[i + 0]);
             u32 type = GetUi32(&_incoming[i + 8]);
@@ -110,7 +110,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
                 continue; // ignore replies
 
             u64 timestamp = GetUi64(&_incoming[i + 8 + 4]);
-            int len = (int)(pktlen - (8 + 4));
+            len = (int)(pktlen - (8 + 4));
 
             const u8* p = (pktlen >= (4 + 8 + 8) ? &_incoming[i + 8 + 4 + 8] : nullptr);
             MP_LOG("RECV GEN - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
@@ -125,8 +125,11 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
             // consume from incoming buffer
             _incoming.erase(_incoming.begin() + i, _incoming.begin() + i + 8 + pktlen);
 
-            return len;
+            //return len;
         }
+
+        if (len)
+            return len;
 
         // wait for another packet
         if (!block || !BlockForNewIncoming())
