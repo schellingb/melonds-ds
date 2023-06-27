@@ -55,8 +55,8 @@ bool retro_mp::BlockForNewIncoming() {
     size_t start_incoming_size = _incoming.size();
     for (std::clock_t t_start = std::clock();;) {
         // check latest incoming
-        if (send_fn)
-            send_fn(0, 0, 0, 0, 0);
+        if (_send_fn)
+            _send_fn(0, 0, 0, 0, 0);
         if (_incoming.size() > start_incoming_size)
             return true;
         if (!_connections || ((std::clock() - t_start) * 1000 / CLOCKS_PER_SEC) > RECV_TIMEOUT)
