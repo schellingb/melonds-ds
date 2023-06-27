@@ -86,10 +86,11 @@ int retro_mp::SendPacketGeneric(u32 type, u8* data, int len, u64 timestamp) {
 
     const u8* p = (pktlen >= (4 + 8 + 8) ? data : nullptr);
     MP_LOG("SEND     - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
-        (int)pktlen, type, timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
+        (int)pktlen, type, timestamp, (p ? p[0] : 0), (p ? p[1] : 0), (p ? p[2] : 0), (p ? p[3] : 0), (p ? p[4] : 0), (p ? p[5] : 0), (p ? p[6] : 0), (p ? p[7] : 0));
 
-    // broadcast to everyone
+    // broadcast to everyone then flush outgoing
     _send_fn(RETRO_NETPACKET_RELIABLE, &_buf[0], pktlen, 0xFFFF, true);
+    _send_fn(0, 0, 0, 0, 0);
     return len;
 }
 
@@ -113,7 +114,7 @@ int retro_mp::RecvPacketGeneric(u8* out_data, bool block, u64* out_timestamp) {
 
             const u8* p = (pktlen >= (4 + 8 + 8) ? &_incoming[i + 8 + 4 + 8] : nullptr);
             MP_LOG("RECV GEN - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
-                (int)pktlen, type, timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
+                (int)pktlen, type, timestamp, (p ? p[0] : 0), (p ? p[1] : 0), (p ? p[2] : 0), (p ? p[3] : 0), (p ? p[4] : 0), (p ? p[5] : 0), (p ? p[6] : 0), (p ? p[7] : 0));
 
             if (out_data)
                 std::memcpy(out_data, &_incoming[i + 8 + 4 + 8], len);
@@ -162,7 +163,7 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
 
             const u8* p = (pktlen >= (4 + 8 + 8) ? &_incoming[i + 8 + 4 + 8] : nullptr);
             MP_LOG("RECV REP - Size: %5d - Type: %4x - Timestamp: %8d - Data: %02x%02x%02x%02x%02x%02x%02x%02x...\n",
-                (int)pktlen, type, pkt_timestamp, (p ? p[0] : -1), (p ? p[1] : -1), (p ? p[2] : -1), (p ? p[3] : -1), (p ? p[4] : -1), (p ? p[5] : -1), (p ? p[6] : -1), (p ? p[7] : -1));
+                (int)pktlen, type, pkt_timestamp, (p ? p[0] : 0), (p ? p[1] : 0), (p ? p[2] : 0), (p ? p[3] : 0), (p ? p[4] : 0), (p ? p[5] : 0), (p ? p[6] : 0), (p ? p[7] : 0));
 
             // consume from incoming buffer
             _incoming.erase(_incoming.begin() + i, _incoming.begin() + i + 8 + pktlen);
@@ -175,7 +176,7 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
         }
 
         // wait for another packet
-        /*if (!BlockForNewIncoming())*/ {
+        if (!BlockForNewIncoming()) {
             MP_LOG("RECV REP - AidMask: %04x - Ret: %04x - No incoming packet, cannot receive all\n", aidmask, ret);
             return ret; // no more replies available
         }
