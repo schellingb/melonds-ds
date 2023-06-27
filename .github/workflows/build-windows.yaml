@@ -19,10 +19,10 @@ jobs:
           - repo: https://github.com/JesseTG/melonDS.git
             commit: 9703712
             release: true
-          - repo: https://github.com/melonDS-emu/melonDS.git
-            commit: master
-            release: false
-            # This profile is used to receive advanced notice of breaking changes
+          #- repo: https://github.com/melonDS-emu/melonDS.git
+          #  commit: master
+          #  release: false
+          #  # This profile is used to receive advanced notice of breaking changes
     env:
       ARCHIVE_NAME: "melondsds_libretro-win32-x86_64"
     defaults:
