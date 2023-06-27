@@ -32,9 +32,10 @@ namespace retro_mp {
     static std::vector<u8> _buf, _incoming;
     static retro_netpacket_send_t _send_fn;
 
-    static int BlockForNewIncoming();
+    static bool BlockForNewIncoming();
     static int SendPacketGeneric(u32 type, u8* packet, int len, u64 timestamp);
     static int RecvPacketGeneric(u8* packet, bool block, u64* timestamp);
+    static u16 RecvReplies(u8* packets, u64 timestamp, u16 aidmask);
     static void NetPacketStart(uint16_t client_id, retro_netpacket_send_t _send_fn);
     static void NetPacketReceive(const void* pkt, size_t pktlen, uint16_t client_id);
     static void NetPacketStop(void);
@@ -125,8 +126,8 @@ u16 retro_mp::RecvReplies(u8* packets, u64 timestamp, u16 aidmask) {
             if ((type & 0xFFFF) != 2)
                 continue; // not a reply
 
-            u64 timestamp = GetUi64(&_incoming[i + 8 + 4]);
-            if (pktheader.Timestamp >= (timestamp - 32)) { // relevant packet
+            u64 pkt_timestamp = GetUi64(&_incoming[i + 8 + 4]);
+            if (pkt_timestamp >= (timestamp - 32)) { // relevant packet
                 int len = (int)(pktlen - (8 + 4));
                 u32 aid = (type >> 16);
                 if (packets && aid && len <= 1024)
@@ -198,7 +199,7 @@ bool Platform::MP_Init() {
     static const retro_netpacket_callback packet_callbacks = {
         retro_mp::NetPacketStart,
         retro_mp::NetPacketReceive,
-        retro_mp::NetPacketStop
+        retro_mp::NetPacketStop,
         nullptr, // poll
         retro_mp::NetPacketConnected,
         retro_mp::NetPacketDisconnected
