@@ -18,6 +18,7 @@
 #include <libretro.h>
 #include <retro_timers.h>
 #include <Platform.h>
+#include <NDS.h>
 #include "../memory.hpp"
 #include "../environment.hpp"
 #include "../config.hpp"
@@ -125,10 +126,10 @@ void Platform::WriteGBASave(const u8* savedata, u32 savelen, u32 writeoffset, u3
 }
 
 void retro::platform_set_instance_id(int instance_id) {
-    if (_instance_id == instance_id)
+    if (Platform::_instance_id == instance_id)
         return;
 
-    retro::log(RETRO_LOG_DEBUG, "Reset NDS system due to instance id changing from %d to %d\n", _instance_id, instance_id);
-    _instance_id = instance_id;
+    retro::log(RETRO_LOG_DEBUG, "Reset NDS system due to instance id changing from %d to %d\n", Platform::_instance_id, instance_id);
+    Platform::_instance_id = instance_id;
     NDS::Reset();
 }

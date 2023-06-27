@@ -18,7 +18,6 @@
 #include <ctime>
 #include <Platform.h>
 #include <SPI.h>
-#include <NDS.h>
 #include "../environment.hpp"
 
 #define GetUi32(p) (((const u8*)(p))[0] | ((u32)((const u8*)(p))[1] << 8) | ((u32)((const u8*)(p))[2] << 16) | ((u32)((const u8*)(p))[3] << 24))
