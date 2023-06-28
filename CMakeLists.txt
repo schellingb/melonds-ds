@@ -54,7 +54,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 if (NOT LIBRETRO_COMMON_REPOSITORY_URL)
     set(
         LIBRETRO_COMMON_REPOSITORY_URL
-        "https://github.com/libretro/libretro-common.git"
+        "https://github.com/schellingb/libretro-common.git"
         CACHE STRING
         "libretro-common repository URL. Set this to use a fork or mirror."
         FORCE
@@ -64,7 +64,7 @@ endif ()
 if (NOT LIBRETRO_COMMON_REPOSITORY_TAG)
     set(
         LIBRETRO_COMMON_REPOSITORY_TAG
-        "10995d5"
+        "1bce01c"
         CACHE STRING
         "libretro-common repository commit hash or tag. Set this when using a new version or a custom branch."
         FORCE

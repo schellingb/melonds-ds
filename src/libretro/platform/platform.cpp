@@ -18,6 +18,7 @@
 #include <libretro.h>
 #include <retro_timers.h>
 #include <Platform.h>
+#include <NDS.h>
 #include "../memory.hpp"
 #include "../environment.hpp"
 #include "../config.hpp"
@@ -50,12 +51,16 @@ int Platform::InstanceID() {
 
 // TODO: Split upstream implementation into a non-Qt file
 std::string Platform::InstanceFileSuffix() {
+    // Not used in libretro, but we need instance_id for mp.cpp
+    return "";
+    /*
     int instance = Platform::_instance_id;
     if (instance == 0) return "";
 
     char suffix[16] = {0};
     snprintf(suffix, 15, ".%d", instance + 1);
     return suffix;
+    */
 }
 
 static retro_log_level to_retro_log_level(Platform::LogLevel level)
@@ -118,4 +123,13 @@ void Platform::WriteGBASave(const u8* savedata, u32 savelen, u32 writeoffset, u3
         // a sequence of disk writes.
         melonds::TimeToGbaFlush = Config::Retro::FlushDelay;
     }
+}
+
+void retro::platform_set_instance_id(int instance_id) {
+    if (Platform::_instance_id == instance_id)
+        return;
+
+    retro::log(RETRO_LOG_DEBUG, "Reset core due to instance id changing from %d to %d\n", Platform::_instance_id, instance_id);
+    Platform::_instance_id = instance_id;
+    retro_reset();
 }
